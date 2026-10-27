@@ -41,9 +41,10 @@ test("CMS があれば型B", () => {
   assert.equal(v.typeLabel, "型B: WordPress");
 });
 
-test("EC-CUBE は静的にできないと手順に書く", () => {
-  const v = verdict(situation({ site: { cms: "EC-CUBE" } }));
+test("EC-CUBE は静的にできないと手順に書き、サーバーの解約は勧めない", () => {
+  const v = verdict(situation({ site: { cms: "EC-CUBE" }, mail: { kind: "rental" } }));
   assert.ok(v.steps.some((s) => s.includes("EC サイトは静的にできない")));
+  assert.ok(!v.steps.some((s) => s.includes("レンタルサーバーを解約する")));
 });
 
 test("サイト作成サービスは型C で、メールの引っ越しが無ければ相談の導線を出さない", () => {
@@ -62,13 +63,15 @@ test("中身を読めないサイトは型を決めず、理由を出す", () =>
   const v = verdict(situation({ site: { readable: false, unreadableReason: "Cloudflare のボット対策の確認画面が出て、サイトの中身を読めなかった" } }));
   assert.equal(v.type, null);
   assert.match(v.typeLabel, /型を判定できない: Cloudflare のボット対策/);
-  assert.equal(v.consult, false);
+  assert.equal(v.consult, true);
 });
 
-test("届かないサイトは判定できないと出す", () => {
-  const v = verdict(situation({ site: { reachable: false, error: "timeout" } }));
+test("届かないサイトは判定できないと出し、メールの判定と相談の入口は残す", () => {
+  const v = verdict(situation({ site: { reachable: false, error: "timeout" }, mail: { kind: "rental" } }));
   assert.equal(v.type, null);
   assert.equal(v.typeLabel, "サイトに届かず判定できない");
+  assert.equal(v.mailMove, true);
+  assert.equal(v.consult, true);
 });
 
 test("DNS もサイトもすでに Cloudflare なら、移ったと出して相談の導線を出さない", () => {

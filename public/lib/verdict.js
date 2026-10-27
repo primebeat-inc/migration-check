@@ -22,11 +22,14 @@ export function phpAdvice(version) {
 }
 
 export function verdict({ domain, tld, dnsInfo, rdap, mail, site, admin }) {
+  const mailMove = mail.kind === "rental" || mail.kind === "same_server" ? true : mail.kind === "unknown" || mail.kind === "gateway" ? null : false;
+  // サイトを読めなくても、メールの判定と相談の入口は残す
   if (!site.reachable) {
-    return { type: null, typeLabel: "サイトに届かず判定できない", consult: false, mailMove: null, steps: [], warnings: [site.error] };
+    const steps = ["www を付けた URL でもう一度試す。サイトがあるのに届かないときは、作りを確かめる必要がある"];
+    if (mailMove === true) steps.push("メールはサーバーにある。サーバーを解約する前にメールを Google Workspace などへ移す");
+    return { type: null, typeLabel: "サイトに届かず判定できない", consult: true, mailMove, steps, warnings: [site.error] };
   }
   const type = !site.readable ? null : site.platform ? "C" : site.cms ? "B" : site.dynamicHints.length ? "D" : "A";
-  const mailMove = mail.kind === "rental" || mail.kind === "same_server" ? true : mail.kind === "unknown" || mail.kind === "gateway" ? null : false;
   const exposedAdmin = admin.filter((a) => a.exposed);
   const warnings = [];
   if (exposedAdmin.length) warnings.push(`管理画面がインターネットから開ける: ${exposedAdmin.map((a) => a.path).join("、")}`);
@@ -56,11 +59,11 @@ export function verdict({ domain, tld, dnsInfo, rdap, mail, site, admin }) {
       const lockNote = rdap.transferLocked ? "今はロックがかかっている。" : "";
       steps.push(`（任意）ドメインも移すなら: ${lockNote}今の事業者でロックを外し、認証コードを取り、Cloudflare で移管を申し込む。旧事業者の承認メールに対応する。多くは5営業日以内。登録や登録者情報の変更から60日以内は移管できない`);
     }
-    if (mailMove !== false || type === "B" || type === "D") steps.push("サイトとメールが新しい置き場所で動くのを確かめてから、レンタルサーバーを解約する");
+    if (site.cms !== "EC-CUBE" && (mailMove !== false || type === "B" || type === "D")) steps.push("サイトとメールが新しい置き場所で動くのを確かめてから、レンタルサーバーを解約する");
   }
 
   const alreadyMoved = dnsInfo.onCloudflare && site.behindCloudflare;
-  const consult = !alreadyMoved && (["A", "B", "D"].includes(type) || mailMove === true);
+  const consult = !alreadyMoved && (type !== "C" || mailMove === true);
   const typeLabel = {
     A: "型A: 静的サイトの可能性",
     B: `型B: ${site.cms}`,
