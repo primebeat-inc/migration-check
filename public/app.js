@@ -51,7 +51,7 @@ async function probeWordPress(host) {
 
 function subject(r) {
   const from = new URLSearchParams(location.search).get("utm_source");
-  return "サイトとメールの引っ越しの相談（" + r.domain + "）" + (from ? "［" + from + "］" : "");
+  return "サーバー引っ越しの相談（" + r.domain + "）" + (from ? "［" + from + "］" : "");
 }
 
 function consultLink(r) {
@@ -64,10 +64,10 @@ function reportSection(r) {
     "<ul><li>PHP の版と、管理画面が外から開けるかの調べ（持ち主だと確かめたドメインだけを調べます）</li><li>今の事業者とメールの移し先ごとの、どの画面で何をするかの手引き</li><li>今の DNS の設定と、Cloudflare に入れる値の対応表、解約前の確認表、うまくいかなかったときの戻し方</li></ul>";
   if (r.site.source !== "browser" || !r.verdict.consult) return "";
   if (!report.ready) {
-    return "<h2>手順書（税込980円・買い切り）</h2>" + what + '<p class="note">準備中です。決済の準備ができしだい始めます。</p>';
+    return "<h2>サーバー引っ越しの手順書（税込980円・買い切り）</h2>" + what + '<p class="note">準備中です。決済の準備ができしだい始めます。</p>';
   }
   return (
-    "<h2>手順書（税込980円・買い切り）</h2>" +
+    "<h2>サーバー引っ越しの手順書（税込980円・買い切り）</h2>" +
     what +
     '<p>はじめに、このドメインの持ち主だと確かめます。DNS に確認の値を1行足してもらいます。</p><div class="actions"><button id="owner-start" type="button">持ち主の確認をはじめる</button></div><div id="owner" aria-live="polite"></div>'
   );

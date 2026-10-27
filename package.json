@@ -1,7 +1,7 @@
 {
   "name": "migration-check",
   "private": true,
-  "description": "サイトとメールの引っ越し判定（ブラウザで動く DNS の判定と、サイトの中身を読む Cloudflare Worker）",
+  "description": "サーバー引っ越し判定（ブラウザで動く DNS の判定と、サイトの中身を読む Cloudflare Worker）",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --port 8790",
