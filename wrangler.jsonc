@@ -1,0 +1,28 @@
+// 公開ベータ版。check.prime-beat.com で公開する。デプロイは npm run deploy（動いている版のコミットを画面に出すため）
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "migration-check-beta",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": false,
+  "routes": [{ "pattern": "check.prime-beat.com", "custom_domain": true }],
+  // 画面のファイルはリポジトリの public/ をそのまま配る。配ったものとリポジトリを見比べられるようにするため
+  "assets": { "directory": "./public", "html_handling": "auto-trailing-slash", "not_found_handling": "none" },
+  // 接続元ごとの回数は Durable Objects で数える。Rate Limiting の近似では公開先で1分に約46回通ったため
+  "durable_objects": {
+    "bindings": [
+      { "name": "CLIENT_LIMITER", "class_name": "ClientLimiter" },
+      // 日ごとの件数。ドメインと接続元は書かない
+      { "name": "STATS", "class_name": "Stats" }
+    ]
+  },
+  // Free プランで作れるのは SQLite を使う型だけなので new_sqlite_classes にする
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ClientLimiter"] },
+    { "tag": "v2", "new_sqlite_classes": ["Stats"] }
+  ],
+  "ratelimits": [
+    // 同じドメインへの判定の回数。調べられる側のサイトに負担をかけないため
+    { "name": "PER_TARGET", "namespace_id": "1002", "simple": { "limit": 6, "period": 60 } }
+  ]
+}

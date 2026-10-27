@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>サイトとメールの引っ越し判定（ベータ版）</title>
+<meta name="description" content="今のレンタルサーバーから、サイトとメールを移せるかを無料で判定します。DNS とメールの判定はブラウザの中だけで動きます。">
+<link rel="stylesheet" href="/app.css">
+<script type="module" src="/app.js"></script>
+</head>
+<body>
+<main>
+<h1>サイトとメールの引っ越し判定（ベータ版）</h1>
+<p class="lead">今のレンタルサーバーから、サイトとメールを移せるかを無料で判定します。サイトの移し先は Cloudflare、メールの移し先は Google Workspace などを考えています。URL を入れると、移すときに気をつける点と、持ち主がやる手順が分かります。</p>
+<p class="facts">無料・登録不要・パスワードは要りません・10秒ほど</p>
+<p class="note">運営: Prime Beat株式会社（代表 渋谷竜響）／判定に使うのは、公開の DNS とサイトの公開ページだけです</p>
+<form id="f">
+  <label for="u" class="visually-hidden">サイトの URL</label>
+  <input id="u" name="url" placeholder="例: example.co.jp" autocomplete="off" inputmode="url" required>
+  <button id="b" type="submit">判定する</button>
+</form>
+<div id="out" aria-live="polite"></div>
+
+<section class="faq">
+<h2>よくある質問</h2>
+<h3>無料ですか</h3>
+<p>はい。判定は無料で、登録も要りません。引っ越しを頼むときだけ、サイトの作りとメールの状態を確かめてから見積をお出しします。</p>
+<h3>入れたドメインはどう扱われますか</h3>
+<p>DNS とメールの判定はブラウザの中だけで行い、Prime Beat には届きません。サイトの中身を調べるためにドメインだけが Prime Beat のサーバーに届きますが、保存しません（同じドメインの調べを10分ほど使い回すための一時的な置き場を除きます）。</p>
+<h3>「気をつける点」が無ければ安全ですか</h3>
+<p>いいえ。外から見える範囲では見つからなかった、という意味です。管理画面のパスワードの強さ、プラグインの更新漏れ、サーバーの中のプログラムの弱点は調べていません。</p>
+<h3>自分で移せますか</h3>
+<p>はい。結果の「持ち主がやる手順」を上から進めれば、自分で移せます。メールがレンタルサーバーにあるときは、レンタルサーバーを解約する前にメールを移してください。解約するとメールも消えます。</p>
+<h3>判定が正しいか確かめるには</h3>
+<p>コードと判定の規則を GitHub で公開しています。手元のパソコンで同じ判定を動かして、結果を見比べられます。</p>
+</section>
+
+<section class="about">
+<h2>運営会社を信頼しなくても確かめられること</h2>
+<ul>
+<li>DNS・メール・ドメインの登録情報の判定は、このページを開いたブラウザの中で動きます。問い合わせ先は Cloudflare の公開 DNS と、ドメインの登録所（RDAP）で、Prime Beat のサーバーには届きません。</li>
+<li>サイトの中身（CMS・PHP の版・管理画面）は、ブラウザの決まりで他のサイトを読めないため、ドメインだけを Prime Beat のサーバーに送って調べます。結果は保存しません。この部分だけは、サーバーで動くコードを信頼する必要があります。</li>
+<li>どこに何を送っているかは、ブラウザの開発者ツールのネットワーク欄で見られます。</li>
+<li>ブラウザで動くコード、判定の規則、サーバーのコードは <a href="https://github.com/primebeat-inc/migration-check" rel="noopener">GitHub</a> で公開しています（MIT ライセンス）。いま動いている版: <code id="commit">確かめています</code>。配られているファイルがその版と同じかは、リポジトリの <code>npm run verify</code> で確かめられます。</li>
+<li>Prime Beat のサーバーを使わずに、手元のパソコンで全部を動かすこともできます。手順はリポジトリの README にあります。</li>
+</ul>
+
+<h2>このページについて</h2>
+<ul>
+<li>ベータ版です。判定は外から見える情報だけをもとにしていて、間違えることがあります。</li>
+<li>サイトの中身を調べるときに、入れたサイトのページに最大5回アクセスします。調べたサイトのアクセスの記録には「PrimeBeat-migration-check」と残ります。</li>
+<li>数を数えるために、判定の型と、相談のリンクが押されたことだけを送ります。ドメインは含みません。詳しくは<a href="/terms">利用条件と扱う情報</a>をご覧ください。</li>
+<li>ご自身が管理していないサイトの弱点を探す目的では使わないでください。</li>
+<li>運営: <a href="https://www.prime-beat.com/" rel="noopener">Prime Beat株式会社</a>　お問い合わせ: info@prime-beat.com</li>
+</ul>
+</section>
+</main>
+</body>
+</html>
