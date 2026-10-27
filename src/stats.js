@@ -1,8 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 
-export const CHECK_EVENTS = ["check_A", "check_B", "check_C", "check_D", "check_moved", "check_unreadable", "check_mail_move", "check_error", "ratelimited"];
+export const CHECK_EVENTS = ["check_A", "check_B", "check_C", "check_D", "check_U", "check_moved", "check_unreadable", "check_mail_move", "check_error", "ratelimited", "owner_challenge", "owner_verified", "detail_checked"];
 export const CLIENT_EVENTS = ["consult_mail", "consult_copy"];
-export const RESULT_TYPES = ["A", "B", "C", "D", "moved", "none"];
+export const RESULT_TYPES = ["A", "B", "C", "D", "U", "moved", "none"];
 
 // 日ごとの件数だけを持つ。ドメインと接続元は書かない
 export class Stats extends DurableObject {

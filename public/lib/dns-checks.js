@@ -205,6 +205,53 @@ export async function readMail(mx, siteIps, domain) {
 }
 
 
+// https://www.cloudflare.com/ips-v4 と ips-v6 を 2026-10-27 に読んだ値
+const CLOUDFLARE_V4 = ["173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22", "141.101.64.0/18", "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20", "197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13", "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22"];
+const CLOUDFLARE_V6 = ["2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32", "2405:8100::/32", "2a06:98c0::/29", "2c0f:f248::/32"];
+
+// DNS の向き先だけで分かるサイト作成サービス。2026-10-27 に実際のドメインで確かめたものだけを置く
+const DNS_PLATFORMS = [
+  { name: "Shopify", cname: /(^|\.)myshopify\.com\.?$/, v4: ["23.227.38.0/24"] },
+  { name: "Wix", cname: /(^|\.)wixdns\.net\.?$/, v4: [] },
+  { name: "Squarespace", cname: /(^|\.)squarespace\.com\.?$/, v4: ["198.49.23.0/24", "198.185.159.0/24"] },
+];
+
+function v4ToInt(ip) {
+  return ip.split(".").reduce((n, x) => n * 256 + Number(x), 0);
+}
+
+export function inV4Range(ip, cidr) {
+  if (ip.includes(":")) return false;
+  const [base, bits] = cidr.split("/");
+  const size = 2 ** (32 - Number(bits));
+  const start = Math.floor(v4ToInt(base) / size) * size;
+  return v4ToInt(ip) >= start && v4ToInt(ip) < start + size;
+}
+
+function v6Bits(ip) {
+  const [head, tail = ""] = ip.toLowerCase().split("::");
+  const h = head ? head.split(":") : [];
+  const t = tail ? tail.split(":") : [];
+  const groups = ip.includes("::") ? [...h, ...Array(8 - h.length - t.length).fill("0"), ...t] : h;
+  return groups.map((g) => parseInt(g || "0", 16).toString(2).padStart(16, "0")).join("");
+}
+
+export function inV6Range(ip, cidr) {
+  if (!ip.includes(":")) return false;
+  const [base, bits] = cidr.split("/");
+  return v6Bits(ip).slice(0, Number(bits)) === v6Bits(base).slice(0, Number(bits));
+}
+
+// サイトの中身を読まずに、DNS の向き先から置き場所を見る
+export async function readHosting(host, siteIps) {
+  const cnames = await dns(host, "CNAME").catch(() => []);
+  const platform =
+    DNS_PLATFORMS.find((p) => cnames.some((c) => p.cname.test(c)) || siteIps.some((ip) => p.v4.some((r) => inV4Range(ip, r))))?.name ?? null;
+  const behindCloudflare =
+    siteIps.length > 0 && siteIps.every((ip) => CLOUDFLARE_V4.some((r) => inV4Range(ip, r)) || CLOUDFLARE_V6.some((r) => inV6Range(ip, r)));
+  return { cnames, platform, behindCloudflare, hasAddress: siteIps.length > 0 };
+}
+
 // DNS と登録情報だけで分かることをまとめて読む。サイトの中身は読まない
 export async function checkDns(host, { userAgent } = {}) {
   let { domain, tld } = registrableDomain(host);
@@ -214,7 +261,7 @@ export async function checkDns(host, { userAgent } = {}) {
     if ((await dns(cityLevel, "NS")).length > 0) domain = cityLevel;
   }
   const siteIps = await publicIps(host);
-  const [dnsInfo, rdap] = await Promise.all([readDomain(domain, tld), readRdap(domain, tld, { userAgent })]);
+  const [dnsInfo, rdap, hosting] = await Promise.all([readDomain(domain, tld), readRdap(domain, tld, { userAgent }), readHosting(host, siteIps)]);
   const mail = await readMail(dnsInfo.mx, siteIps, domain);
-  return { host, domain, tld, dnsInfo, rdap, mail };
+  return { host, domain, tld, dnsInfo, rdap, mail, hosting };
 }

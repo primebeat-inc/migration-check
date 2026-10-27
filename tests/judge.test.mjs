@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { normalizeHost, registrableDomain, cloudflareRegistrar, verdict, InputError } from "../src/judge.js";
+import { siteFromBrowser } from "../public/lib/verdict.js";
+import { inV4Range, inV6Range } from "../public/lib/dns-checks.js";
 
 function situation(overrides = {}) {
   const base = {
@@ -121,4 +123,34 @@ test("登録の単位のドメインを切り出す", () => {
   assert.equal(registrableDomain("a.b.example.com").domain, "example.com");
   assert.equal(registrableDomain("www.example.co.uk").domain, "example.co.uk");
   assert.equal(registrableDomain("www.example.tokyo.jp").domain, "example.tokyo.jp");
+});
+
+test("ブラウザだけの判定で目印が無ければ、型A とは言わず作りは確かめていないと出す", () => {
+  const site = siteFromBrowser("example.co.jp", { hasAddress: true, platform: null, behindCloudflare: false }, false);
+  const v = verdict(situation({ site }));
+  assert.equal(v.type, "U");
+  assert.match(v.typeLabel, /作りは確かめていない/);
+  assert.equal(v.consult, true);
+});
+
+test("ブラウザだけの判定で WordPress の画像を読めたら型B", () => {
+  const site = siteFromBrowser("example.co.jp", { hasAddress: true, platform: null, behindCloudflare: false }, true);
+  assert.equal(verdict(situation({ site })).typeLabel, "型B: WordPress");
+});
+
+test("DNS の向き先でサイト作成サービスと分かれば型C", () => {
+  const site = siteFromBrowser("shop.example.com", { hasAddress: true, platform: "Shopify", behindCloudflare: false }, null);
+  assert.equal(verdict(situation({ site })).type, "C");
+});
+
+test("DNS にアドレスが無ければ届かないと出す", () => {
+  const site = siteFromBrowser("example.co.jp", { hasAddress: false }, null);
+  assert.equal(verdict(situation({ site })).typeLabel, "サイトに届かず判定できない");
+});
+
+test("Cloudflare の IP の範囲に入るかを見分ける", () => {
+  assert.equal(inV4Range("104.21.58.209", "104.16.0.0/13"), true);
+  assert.equal(inV4Range("8.8.8.8", "104.16.0.0/13"), false);
+  assert.equal(inV6Range("2606:4700:3036::6815:3ad1", "2606:4700::/32"), true);
+  assert.equal(inV6Range("2001:db8::1", "2606:4700::/32"), false);
 });

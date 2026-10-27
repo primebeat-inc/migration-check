@@ -1,4 +1,5 @@
-import { normalizeHost, InputError } from "../public/lib/dns-checks.js";
+import { normalizeHost, registrableDomain, InputError } from "../public/lib/dns-checks.js";
+import { challenge, isOwnerVerified, issueProof, isProofValid } from "./owner.js";
 import { checkSite } from "./site-checks.js";
 import { clientKey } from "./client-key.js";
 import { CLIENT_EVENTS, RESULT_TYPES } from "./stats.js";
@@ -6,7 +7,8 @@ import { CLIENT_EVENTS, RESULT_TYPES } from "./stats.js";
 export { ClientLimiter } from "./limiter.js";
 export { Stats } from "./stats.js";
 
-// 画面のファイルは public/ から静的に配る。この Worker が受けるのは /api/ だけ
+// 画面のファイルは public/ から静的に配る。この Worker が受けるのは /api/ だけ。
+// 無料の判定はブラウザだけで動き、ここには届かない。サイトの中身は持ち主を確かめたドメインだけを調べる
 const CACHE_SECONDS = 600;
 const STATS_DAYS = 31;
 const REPOSITORY = "https://github.com/primebeat-inc/migration-check";
@@ -35,13 +37,61 @@ async function allow(env, key) {
   return env.CLIENT_LIMITER.get(env.CLIENT_LIMITER.idFromName(key)).hit();
 }
 
+function paymentRequired(env) {
+  return env.PAYMENT_REQUIRED !== "false";
+}
+
+function reportReady(env) {
+  return Boolean(env.OWNER_SECRET) && (!paymentRequired(env) || Boolean(env.STRIPE_SECRET_KEY));
+}
+
+async function limited(request, env, ctx) {
+  const { allowed, retryAfter } = await allow(env, clientKey(request.headers.get("cf-connecting-ip")));
+  if (allowed) return null;
+  count(env, ctx, "ratelimited");
+  return json({ error: `回数が多すぎます。${retryAfter}秒ほど待ってからもう一度試してください` }, 429, { "retry-after": String(retryAfter) });
+}
+
+function domainOf(url) {
+  return registrableDomain(normalizeHost(url.searchParams.get("host"))).domain;
+}
+
+async function ownerChallenge(request, env, ctx, url) {
+  if (!reportReady(env)) return json({ error: "手順書は準備中です" }, 503);
+  const stop = await limited(request, env, ctx);
+  if (stop) return stop;
+  let domain;
+  try {
+    domain = domainOf(url);
+  } catch (e) {
+    return json({ error: e.message }, 400);
+  }
+  count(env, ctx, "owner_challenge");
+  return json({ domain, ...(await challenge(env.OWNER_SECRET, domain)) });
+}
+
+async function ownerVerify(request, env, ctx, url) {
+  if (!reportReady(env)) return json({ error: "手順書は準備中です" }, 503);
+  const stop = await limited(request, env, ctx);
+  if (stop) return stop;
+  let domain;
+  try {
+    domain = domainOf(url);
+  } catch (e) {
+    return json({ error: e.message }, 400);
+  }
+  if (!(await isOwnerVerified(env.OWNER_SECRET, domain))) {
+    return json({ verified: false, error: "DNS に確認の値がまだ見つかりません。追加してから数分おいて、もう一度試してください" }, 200);
+  }
+  count(env, ctx, "owner_verified");
+  return json({ verified: true, domain, proof: await issueProof(env.OWNER_SECRET, domain) });
+}
+
 async function site(request, env, ctx, url) {
   const started = Date.now();
-  const { allowed, retryAfter } = await allow(env, clientKey(request.headers.get("cf-connecting-ip")));
-  if (!allowed) {
-    count(env, ctx, "ratelimited");
-    return json({ error: `回数が多すぎます。${retryAfter}秒ほど待ってからもう一度試してください` }, 429, { "retry-after": String(retryAfter) });
-  }
+  if (!reportReady(env)) return json({ error: "手順書は準備中です" }, 503);
+  const stop = await limited(request, env, ctx);
+  if (stop) return stop;
 
   let host;
   try {
@@ -49,6 +99,12 @@ async function site(request, env, ctx, url) {
   } catch (e) {
     return json({ error: e.message }, 400);
   }
+  // 持ち主の同意が無いサイトは調べない。調べた記録が相手に残るため
+  const domain = registrableDomain(host).domain;
+  if (!(await isProofValid(env.OWNER_SECRET, domain, url.searchParams.get("proof")))) {
+    return json({ error: "持ち主の確認が済んでいないか、確認から1時間を過ぎました" }, 403);
+  }
+  if (paymentRequired(env)) return json({ error: "決済の確認は準備中です" }, 402);
 
   const cache = caches.default;
   const cacheKey = new Request(`https://cache.migration-check.internal/site/${host}`);
@@ -62,7 +118,7 @@ async function site(request, env, ctx, url) {
   try {
     const result = await checkSite(host);
     ctx.waitUntil(cache.put(cacheKey, new Response(JSON.stringify(result), { headers: { "cache-control": `max-age=${CACHE_SECONDS}` } })));
-    // 調べたドメインは残さない
+    count(env, ctx, "detail_checked");
     console.log(JSON.stringify({ event: "site", readable: result.site.readable ?? false, ms: Date.now() - started }));
     return json(result);
   } catch (e) {
@@ -115,6 +171,12 @@ export default {
     switch (url.pathname) {
       case "/api/site":
         return site(request, env, ctx, url);
+      case "/api/report/status":
+        return json({ ready: reportReady(env), priceYen: 980, taxIncluded: true });
+      case "/api/owner/challenge":
+        return ownerChallenge(request, env, ctx, url);
+      case "/api/owner/verify":
+        return ownerVerify(request, env, ctx, url);
       case "/api/version":
         return json({ commit: env.COMMIT || null, repository: REPOSITORY });
       case "/api/stats":

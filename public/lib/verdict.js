@@ -29,7 +29,8 @@ export function verdict({ domain, tld, dnsInfo, rdap, mail, site, admin }) {
     if (mailMove === true) steps.push("メールはサーバーにある。サーバーを解約する前にメールを Google Workspace などへ移す");
     return { type: null, typeLabel: "サイトに届かず判定できない", consult: true, mailMove, steps, warnings: [site.error] };
   }
-  const type = !site.readable ? null : site.platform ? "C" : site.cms ? "B" : site.dynamicHints.length ? "D" : "A";
+  // ブラウザだけの判定ではサイトの中身を読まないので、目印が無くても型A とは言わない
+  const type = !site.readable ? null : site.platform ? "C" : site.cms ? "B" : site.source === "browser" ? "U" : site.dynamicHints.length ? "D" : "A";
   const exposedAdmin = admin.filter((a) => a.exposed);
   const warnings = [];
   if (exposedAdmin.length) warnings.push(`管理画面がインターネットから開ける: ${exposedAdmin.map((a) => a.path).join("、")}`);
@@ -54,12 +55,13 @@ export function verdict({ domain, tld, dnsInfo, rdap, mail, site, admin }) {
     if (site.cms === "EC-CUBE") steps.push("EC サイトは静的にできない。サーバーを残して Cloudflare の後ろに置き、管理画面は Cloudflare Access の後ろに置く");
     else if (type === "B") steps.push(`${site.cms} の公開ページを静的に書き出して Cloudflare Pages に置くか、サーバーを残して Cloudflare の後ろに置くかを決める。管理画面は Cloudflare Access の後ろに置く`);
     else if (type === "D") steps.push("サーバーで動くプログラムがある。静的にできるか、サーバーを残して Cloudflare の後ろに置くかは、中を見てから決める");
+    else if (type === "U") steps.push("サイトの作りで移し方が変わる。静的なページだけなら Cloudflare Pages に置き、サーバーで動くプログラムがあるならサーバーを残して Cloudflare の後ろに置く");
     if (!dnsInfo.onCloudflare) steps.push(`今の事業者（DNS: ${dnsInfo.nsProvider}）の管理画面で、ネームサーバーを Cloudflare が示す2つに変える。反映まで最大で1日ほど`);
     if (dnsInfo.registrar.status === "可" && !/cloudflare/i.test(rdap.registrar ?? "")) {
       const lockNote = rdap.transferLocked ? "今はロックがかかっている。" : "";
       steps.push(`（任意）ドメインも移すなら: ${lockNote}今の事業者でロックを外し、認証コードを取り、Cloudflare で移管を申し込む。旧事業者の承認メールに対応する。多くは5営業日以内。登録や登録者情報の変更から60日以内は移管できない`);
     }
-    if (site.cms !== "EC-CUBE" && (mailMove !== false || type === "B" || type === "D")) steps.push("サイトとメールが新しい置き場所で動くのを確かめてから、レンタルサーバーを解約する");
+    if (site.cms !== "EC-CUBE" && (mailMove !== false || ["B", "D", "U"].includes(type))) steps.push("サイトとメールが新しい置き場所で動くのを確かめてから、レンタルサーバーを解約する");
   }
 
   const alreadyMoved = dnsInfo.onCloudflare && site.behindCloudflare;
@@ -69,6 +71,7 @@ export function verdict({ domain, tld, dnsInfo, rdap, mail, site, admin }) {
     B: `型B: ${site.cms}`,
     C: `型C: サイト作成サービス（${site.platform}）`,
     D: `型を確かめる必要がある: サーバーで動くプログラムがある（${site.dynamicHints.join("、")}）`,
+    U: "作りは確かめていない: 無料の判定で見分けるのは WordPress とサイト作成サービスだけです",
   }[type] ?? `型を判定できない: ${site.unreadableReason}`;
   const label = alreadyMoved && type ? `${typeLabel}（すでに Cloudflare に移っている）` : typeLabel;
 
@@ -88,5 +91,27 @@ export function assemble(input, { host, domain, tld, dnsInfo, rdap, mail }, { si
     site,
     admin,
     verdict: verdict({ domain, tld, dnsInfo, rdap, mail, site, admin }),
+  };
+}
+
+// ブラウザだけの判定で使うサイトの情報。中身は読まず、DNS の向き先と WordPress の画像の読み込みだけで作る
+export function siteFromBrowser(host, hosting, wordpress) {
+  if (!hosting.hasAddress) return { source: "browser", reachable: false, error: "サイトのアドレスが DNS に無い" };
+  const isWordPress = wordpress === true && !hosting.platform;
+  return {
+    source: "browser",
+    reachable: true,
+    readable: true,
+    finalUrl: `https://${host}/`,
+    status: null,
+    server: null,
+    poweredBy: null,
+    php: null,
+    platform: hosting.platform,
+    cms: isWordPress ? "WordPress" : null,
+    wordpress: isWordPress,
+    wordpressSignals: isWordPress ? ["WordPress の画像を読み込めた"] : [],
+    dynamicHints: [],
+    behindCloudflare: hosting.behindCloudflare,
   };
 }
